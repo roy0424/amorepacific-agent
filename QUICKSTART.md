@@ -29,7 +29,7 @@ playwright install chromium
 cp .env.example .env
 
 # .env 파일 편집 (필수 항목만)
-# DATABASE_URL은 기본값(SQLite) 사용 가능
+# DATABASE_URL은 Postgres 사용
 # OPENAI_API_KEY는 Phase 3에서 필요 (지금은 생략 가능)
 ```
 
@@ -179,17 +179,17 @@ python scripts/deploy_flows.py
 
 ## 데이터 확인
 
-### 데이터베이스 조회 (SQLite)
+### 데이터베이스 조회 (Postgres)
 
 ```bash
-# SQLite 콘솔 열기
-sqlite3 data/laneige_tracker.db
+# Postgres 접속
+psql "postgresql+psycopg://laneige:laneige@localhost:5432/laneige_tracker"
 
 # 수집된 제품 수 확인
-sqlite> SELECT COUNT(*) FROM amazon_products;
+laneige_tracker=> SELECT COUNT(*) FROM amazon_products;
 
 # 라네즈 제품만 확인
-sqlite> SELECT p.product_name, r.rank, r.price
+laneige_tracker=> SELECT p.product_name, r.rank, r.price
         FROM amazon_products p
         JOIN amazon_rankings r ON p.id = r.product_id
         WHERE p.product_name LIKE '%laneige%'
@@ -197,7 +197,7 @@ sqlite> SELECT p.product_name, r.rank, r.price
         LIMIT 10;
 
 # 종료
-sqlite> .quit
+laneige_tracker=> \\q
 ```
 
 ### JSON 백업 확인
@@ -265,9 +265,8 @@ tail -f data/logs/error_*.log
    playwright install chromium
    ```
 
-3. **데이터베이스 Lock**
-   - SQLite는 동시 쓰기 제한이 있음
-   - 프로덕션에서는 PostgreSQL 사용 권장
+3. **데이터베이스 연결**
+   - Postgres 접속 정보 확인
 
 4. **봇 차단 지속**
    - `SCRAPING_DELAY_MIN`, `SCRAPING_DELAY_MAX` 값 증가
@@ -278,7 +277,7 @@ tail -f data/logs/error_*.log
 - [ ] `scripts/init_db.py` 실행 성공
 - [ ] `python scripts/run_manual.py --flow amazon-test` 실행 성공
 - [ ] 10개 제품 정보 출력 확인
-- [ ] `data/laneige_tracker.db` 파일 생성 확인
+- [ ] Postgres에 테이블 생성 확인
 - [ ] `data/backups/` 폴더에 JSON 파일 생성 확인
 - [ ] Prefect UI (http://localhost:4200) 접속 확인
 - [ ] Flow Runs 페이지에서 실행 히스토리 확인

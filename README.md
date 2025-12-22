@@ -16,7 +16,7 @@
 - **언어**: Python 3.11+
 - **워크플로우**: Prefect OSS 2.0 (무료!) 🚀
 - **크롤링**: Playwright
-- **데이터베이스**: SQLAlchemy + PostgreSQL/SQLite
+- **데이터베이스**: SQLAlchemy + PostgreSQL
 - **AI/LLM**: OpenAI GPT-4 + LangChain
 - **리포트**: openpyxl + Plotly
 - **로깅**: Loguru + Prefect Logging
@@ -61,6 +61,21 @@ python scripts/deploy_flows.py
 python scripts/run_manual.py --flow amazon
 ```
 
+## Docker Compose
+
+기본 `docker compose up --build`에서 Prefect(4200)와 Streamlit(8501/8502)이 함께 구동됩니다.
+
+```bash
+# 전체 서비스 실행
+docker compose up -d --build
+
+# prompt-tester/db-viewer만 재빌드/재기동
+docker compose up -d --no-deps --build prompt-tester db-viewer
+```
+
+구성 요약:
+- `prompt-tester`, `db-viewer`는 `Dockerfile.dev`로 별도 이미지(`laneige-tracker-dev:latest`)를 사용합니다.
+
 ## 프로젝트 구조
 
 ```
@@ -95,7 +110,7 @@ laneige-ranking-tracker/
 
 ```bash
 # 필수
-DATABASE_URL=sqlite:///data/laneige_tracker.db
+DATABASE_URL=postgresql+psycopg://laneige:laneige@localhost:5432/laneige_tracker
 OPENAI_API_KEY=sk-your-key-here
 YOUTUBE_API_KEY=AIzaSy-your-key-here
 

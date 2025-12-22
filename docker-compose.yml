@@ -33,7 +33,7 @@ services:
       - PREFECT_SERVER_API_HOST=0.0.0.0
       - PREFECT_API_URL=http://127.0.0.1:4200/api
       - PREFECT_UI_API_URL=${PREFECT_UI_API_URL:-http://localhost:4200/api}
-      - PREFECT_API_DATABASE_CONNECTION_URL=postgresql+psycopg://${POSTGRES_USER:-laneige}:${POSTGRES_PASSWORD:-laneige}@postgres:5432/${POSTGRES_PREFECT_DB:-prefect}
+      - PREFECT_API_DATABASE_CONNECTION_URL=postgresql+asyncpg://${POSTGRES_USER:-laneige}:${POSTGRES_PASSWORD:-laneige}@postgres:5432/${POSTGRES_PREFECT_DB:-prefect}
     ports:
       - "4200:4200"
     depends_on:
@@ -60,42 +60,69 @@ services:
       - PREFECT_WORK_QUEUE_NAME=default
       - PREFECT_DEPLOY_IMAGE=laneige-tracker:latest
       - PREFECT_USE_SERVE=true
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-laneige}:${POSTGRES_PASSWORD:-laneige}@postgres:5432/${POSTGRES_APP_DB:-laneige_tracker}
-    command: ["python", "scripts/deploy_flows.py"]
+      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-laneige}:${POSTGRES_PASSWORD:-laneige}@postgres:5432/${POSTGRES_APP_DB:-laneige_tracker}
+    command: ["prefect", "worker", "start", "--pool", "default-process", "--work-queue", "default"]
     depends_on:
       prefect-server:
         condition: service_healthy
+      init-db:
+        condition: service_completed_successfully
     networks:
       - laneige-network
 
   prompt-tester:
-    image: laneige-tracker:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    image: laneige-tracker-dev:latest
     container_name: laneige-prompt-tester
     restart: unless-stopped
     env_file:
       - .env
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-laneige}:${POSTGRES_PASSWORD:-laneige}@postgres:5432/${POSTGRES_APP_DB:-laneige_tracker}
+      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-laneige}:${POSTGRES_PASSWORD:-laneige}@postgres:5432/${POSTGRES_APP_DB:-laneige_tracker}
     command: ["python", "scripts/run_prompt_tester.py"]
     ports:
       - "8501:8501"
     depends_on:
       postgres:
         condition: service_healthy
+      init-db:
+        condition: service_completed_successfully
     networks:
       - laneige-network
 
   db-viewer:
-    image: laneige-tracker:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    image: laneige-tracker-dev:latest
     container_name: laneige-db-viewer
     restart: unless-stopped
     env_file:
       - .env
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-laneige}:${POSTGRES_PASSWORD:-laneige}@postgres:5432/${POSTGRES_APP_DB:-laneige_tracker}
+      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-laneige}:${POSTGRES_PASSWORD:-laneige}@postgres:5432/${POSTGRES_APP_DB:-laneige_tracker}
     command: ["python", "scripts/run_db_viewer.py"]
     ports:
       - "8502:8502"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      init-db:
+        condition: service_completed_successfully
+    networks:
+      - laneige-network
+
+  init-db:
+    image: laneige-tracker:latest
+    container_name: laneige-init-db
+    restart: "no"
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-laneige}:${POSTGRES_PASSWORD:-laneige}@postgres:5432/${POSTGRES_APP_DB:-laneige_tracker}
+    command: ["python", "scripts/init_db.py"]
     depends_on:
       postgres:
         condition: service_healthy

@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     REPORTS_DIR: Path = DATA_DIR / "reports"
 
     # Database Configuration
-    DATABASE_URL: str = "sqlite:///data/laneige_tracker.db"
+    DATABASE_URL: str = "postgresql+psycopg://laneige:laneige@localhost:5432/laneige_tracker"
     DB_ECHO: bool = False  # SQLAlchemy echo (디버깅용)
 
     # Anthropic (Claude) Configuration - RAG + Insight 생성용
@@ -186,6 +186,8 @@ class Settings(BaseSettings):
     @property
     def database_url_async(self) -> str:
         """비동기 데이터베이스 URL (asyncpg 사용 시)"""
+        if self.DATABASE_URL.startswith("postgresql+psycopg://"):
+            return self.DATABASE_URL.replace("postgresql+psycopg://", "postgresql+asyncpg://")
         if self.DATABASE_URL.startswith("postgresql://"):
             return self.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
         return self.DATABASE_URL

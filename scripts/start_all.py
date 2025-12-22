@@ -118,8 +118,6 @@ class PrefectManager:
             # 서버를 백그라운드 프로세스로 시작 (외부 접속 허용)
             self.server_process = subprocess.Popen(
                 ["prefect", "server", "start", "--host", "0.0.0.0"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
                 text=True
             )
 
@@ -128,7 +126,10 @@ class PrefectManager:
 
             # 서버가 실행 중인지 확인
             if self.server_process.poll() is not None:
-                logger.error("❌ Prefect 서버 시작 실패")
+                logger.error(
+                    "❌ Prefect 서버 시작 실패 (exit code: %s)",
+                    self.server_process.returncode
+                )
                 return False
 
             logger.success("✅ Prefect 서버 시작 완료")

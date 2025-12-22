@@ -21,6 +21,7 @@ from .scenario import (
     ScenarioRanking,
     ScenarioRankingEvent
 )
+from .prompt_templates import PromptTemplate
 
 __all__ = [
     "Brand",
@@ -44,5 +45,6 @@ __all__ = [
     "ScenarioCategory",
     "ScenarioProduct",
     "ScenarioRanking",
-    "ScenarioRankingEvent"
+    "ScenarioRankingEvent",
+    "PromptTemplate"
 ]

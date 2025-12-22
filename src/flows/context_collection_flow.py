@@ -12,6 +12,29 @@ from src.models.events import RankingEvent, EventContextSocial
 from src.models.social_media import YouTubeVideo, YouTubeMetric, TikTokPost, TikTokMetric, InstagramPost, InstagramMetric
 
 
+def _is_viral(platform: str, posted_at: datetime, metrics: dict) -> bool:
+    if not posted_at:
+        return False
+    age_hours = max(1.0, (datetime.utcnow() - posted_at).total_seconds() / 3600)
+    view_count = metrics.get("view_count") or 0
+    like_count = metrics.get("like_count") or 0
+    comment_count = metrics.get("comment_count") or 0
+    share_count = metrics.get("share_count") or 0
+    engagement_score = metrics.get("engagement_score") or 0
+
+    views_per_hour = view_count / age_hours
+    engagement_per_hour = engagement_score / age_hours
+    likes_per_hour = like_count / age_hours
+
+    if platform == "youtube":
+        return views_per_hour >= 5000 or engagement_per_hour >= 500
+    if platform == "tiktok":
+        return views_per_hour >= 20000 or engagement_per_hour >= 2000
+    if platform == "instagram":
+        return likes_per_hour >= 3000 or engagement_per_hour >= 1000
+    return False
+
+
 @task(name="load_event_info")
 def load_event_info_task(event_id: int):
     """이벤트 정보 로드"""
@@ -75,8 +98,17 @@ def collect_social_media_context_task(event_info: dict):
                 (metric.comment_count or 0) * 2
             )
 
-            # 바이럴 여부 판단 (view count 기준)
-            is_viral = metric.view_count and metric.view_count > 100000
+            is_viral = _is_viral(
+                "youtube",
+                video.published_at,
+                {
+                    "view_count": metric.view_count,
+                    "like_count": metric.like_count,
+                    "comment_count": metric.comment_count,
+                    "share_count": 0,
+                    "engagement_score": engagement_score,
+                }
+            )
 
             context = EventContextSocial(
                 event_id=event_id,
@@ -116,7 +148,17 @@ def collect_social_media_context_task(event_info: dict):
                 (metric.share_count or 0) * 3
             )
 
-            is_viral = metric.view_count and metric.view_count > 500000
+            is_viral = _is_viral(
+                "tiktok",
+                post.posted_at,
+                {
+                    "view_count": metric.view_count,
+                    "like_count": metric.like_count,
+                    "comment_count": metric.comment_count,
+                    "share_count": metric.share_count,
+                    "engagement_score": engagement_score,
+                }
+            )
 
             context = EventContextSocial(
                 event_id=event_id,
@@ -155,7 +197,17 @@ def collect_social_media_context_task(event_info: dict):
                 (metric.comment_count or 0) * 2
             )
 
-            is_viral = metric.like_count and metric.like_count > 50000
+            is_viral = _is_viral(
+                "instagram",
+                post.posted_at,
+                {
+                    "view_count": metric.video_view_count or 0,
+                    "like_count": metric.like_count,
+                    "comment_count": metric.comment_count,
+                    "share_count": 0,
+                    "engagement_score": engagement_score,
+                }
+            )
 
             context = EventContextSocial(
                 event_id=event_id,

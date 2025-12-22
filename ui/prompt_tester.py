@@ -15,17 +15,38 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
-from sqlalchemy import select, desc, and_, delete
+from sqlalchemy import select, desc, and_, delete, func
 
 from src.core.database import get_db_context, engine, Base
 from src.models import (
     RankingEvent, AmazonProduct, AmazonCategory,
     EventContextSocial, EventInsight, AmazonRanking, Brand,
-    ScenarioProduct, ScenarioCategory, ScenarioRanking, ScenarioRankingEvent
+    ScenarioProduct, ScenarioCategory, ScenarioRanking, ScenarioRankingEvent,
+    PromptTemplate
 )
 from src.services.insight_generator_openai import OpenAIInsightGenerator
 from src.analyzers.event_detector import EventDetector
 from config.settings import settings
+
+SCENARIO_PRODUCT_SEEDS = [
+    {"name": "Laneige Lip Sleeping Mask", "asin": "B0009V1Z0S"},
+    {"name": "Laneige Water Sleeping Mask", "asin": "B00R9D5J3O"},
+    {"name": "Laneige Cream Skin Toner & Moisturizer", "asin": "B07Q7NWXK3"},
+    {"name": "Laneige Water Bank Blue Hyaluronic Cream", "asin": "B0B9F3BSW5"},
+    {"name": "Laneige Water Bank Blue Hyaluronic Serum", "asin": "B0B9F3S1P7"},
+    {"name": "Laneige Lip Glowy Balm", "asin": "B07ZHB7G5Q"},
+    {"name": "Laneige Bouncy & Firm Sleeping Mask", "asin": "B0C9BG1C7Q"},
+    {"name": "Laneige Water Bank Cleansing Foam", "asin": "B0B9F6Z2RQ"},
+    {"name": "Laneige Cream Skin Refiner", "asin": "B07Q7P5F7S"},
+    {"name": "Laneige Water Bank Blue Hyaluronic Eye Cream", "asin": "B0B9F5ZJ1M"},
+]
+SCENARIO_CATEGORY_SEEDS = [
+    "Lip Care",
+    "Skin Care",
+    "Moisturizers",
+    "Face Masks",
+    "Cleansers",
+]
 
 # 페이지 설정
 st.set_page_config(
@@ -107,8 +128,87 @@ def load_categories() -> List[Dict[str, Any]]:
 
 
 def ensure_scenario_tables():
-    """시나리오 테이블 생성 보장"""
+    """시나리오 테이블 생성 및 기본 더미 데이터 시딩"""
     Base.metadata.create_all(bind=engine)
+    with get_db_context() as db:
+        category_count = db.execute(
+            select(func.count()).select_from(ScenarioCategory)
+        ).scalar_one()
+        product_count = db.execute(
+            select(func.count()).select_from(ScenarioProduct)
+        ).scalar_one()
+
+        if category_count == 0:
+            for name in SCENARIO_CATEGORY_SEEDS:
+                db.add(ScenarioCategory(category_name=name))
+
+        if product_count == 0:
+            for seed in SCENARIO_PRODUCT_SEEDS:
+                db.add(ScenarioProduct(
+                    asin=seed["asin"],
+                    product_name=seed["name"],
+                    brand_id=1
+                ))
+        db.commit()
+
+
+def ensure_prompt_template_table():
+    """프롬프트 템플릿 저장 테이블 생성 보장"""
+    PromptTemplate.__table__.create(bind=engine, checkfirst=True)
+
+
+def load_template_overrides() -> List[Dict[str, Any]]:
+    """저장된 템플릿 오버라이드 로드 (최신순)"""
+    with get_db_context() as db:
+        rows = db.execute(
+            select(PromptTemplate).order_by(desc(PromptTemplate.updated_at))
+        ).scalars().all()
+        return [
+            {
+                "id": row.id,
+                "template_key": row.template_key,
+                "name": row.name,
+                "system_prompt": row.system_prompt,
+                "user_prompt": row.user_prompt,
+                "updated_at": row.updated_at,
+            }
+            for row in rows
+        ]
+
+
+def apply_template_overrides(
+    base_templates: Dict[str, Dict[str, Any]],
+    overrides: Dict[str, Dict[str, str]]
+) -> Dict[str, Dict[str, Any]]:
+    merged = {key: dict(value) for key, value in base_templates.items()}
+    for key, override in overrides.items():
+        if key not in merged:
+            merged[key] = {
+                "name": f"Custom ({key})",
+                "description": "Saved template override",
+            }
+        merged[key].update(override)
+    return merged
+
+
+def save_template_override(template_key: str, system_prompt: str, user_prompt: str, name: Optional[str] = None) -> None:
+    """템플릿 오버라이드 저장 (이력 추가)"""
+    with get_db_context() as db:
+        db.add(PromptTemplate(
+            template_key=template_key,
+            name=name,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt
+        ))
+        db.commit()
+
+def delete_template_override(template_id: int) -> None:
+    """저장된 템플릿 오버라이드 삭제"""
+    with get_db_context() as db:
+        db.execute(
+            delete(PromptTemplate).where(PromptTemplate.id == template_id)
+        )
+        db.commit()
 
 
 def load_scenario_products() -> List[Dict[str, Any]]:
@@ -393,6 +493,12 @@ def build_dummy_social_items(
         ]
     }
 
+    authors = {
+        "youtube": ["BeautyLab", "SkinTalks", "GlowJournal", "ReviewRoom", "K-Beauty Hub"],
+        "tiktok": ["@skinwithme", "@glowdaily", "@kbeautytips", "@hydrationhack", "@trendroom"],
+        "instagram": ["@beautyedit", "@skincarereview", "@kbeautyblog", "@glasskinclub", "@dailyglow"],
+    }
+
     sentiment_weights = {
         "RANK_SURGE": {"positive": 0.6, "neutral": 0.3, "negative": 0.1},
         "RANK_DROP": {"positive": 0.1, "neutral": 0.3, "negative": 0.6},
@@ -405,6 +511,26 @@ def build_dummy_social_items(
     )
     sentiment_keys = list(weights.keys())
 
+    def is_viral(platform: str, posted_at: datetime, metrics: Dict[str, Any]) -> bool:
+        age_hours = max(1.0, (datetime.utcnow() - posted_at).total_seconds() / 3600)
+        view_count = metrics.get("view_count") or 0
+        like_count = metrics.get("like_count") or 0
+        comment_count = metrics.get("comment_count") or 0
+        share_count = metrics.get("share_count") or 0
+        engagement_score = metrics.get("engagement_score") or 0
+
+        views_per_hour = view_count / age_hours
+        engagement_per_hour = engagement_score / age_hours
+        likes_per_hour = like_count / age_hours
+
+        if platform == "youtube":
+            return views_per_hour >= 5000 or engagement_per_hour >= 500
+        if platform == "tiktok":
+            return views_per_hour >= 20000 or engagement_per_hour >= 2000
+        if platform == "instagram":
+            return likes_per_hour >= 3000 or engagement_per_hour >= 1000
+        return False
+
     def make_items(platform: str, count: int) -> List[Dict[str, Any]]:
         items = []
         for i in range(count):
@@ -413,15 +539,40 @@ def build_dummy_social_items(
                 weights=[weights[k] for k in sentiment_keys],
                 k=1
             )[0]
+            text = f"{rng.choice(titles[sentiment])}. {rng.choice(summaries[sentiment])}."
+            like_count = rng.randint(80, 12000)
+            comment_count = rng.randint(10, 1800)
+            share_count = rng.randint(5, 2000) if platform == "tiktok" else 0
+            view_count = rng.randint(1200, 280000)
+            posted_at = datetime.utcnow() - timedelta(hours=rng.randint(1, 72))
+            if platform == "tiktok":
+                engagement_score = like_count + (comment_count * 2) + (share_count * 3)
+            else:
+                engagement_score = like_count + (comment_count * 2)
+            viral_flag = is_viral(
+                platform,
+                posted_at,
+                {
+                    "view_count": view_count,
+                    "like_count": like_count,
+                    "comment_count": comment_count,
+                    "share_count": share_count,
+                    "engagement_score": engagement_score,
+                }
+            )
             items.append({
                 "platform": platform,
-                "title": rng.choice(titles[sentiment]),
-                "summary": rng.choice(summaries[sentiment]),
-                "views": rng.randint(1200, 280000),
-                "likes": rng.randint(80, 12000),
-                "comments": rng.randint(10, 1800),
-                "sentiment": sentiment,
-                "index": i + 1
+                "content_id": f"{platform[:2]}-{event_id}-{i + 1}",
+                "author": rng.choice(authors[platform]),
+                "text": text,
+                "hashtags": "laneige,skincare,beauty",
+                "view_count": view_count,
+                "like_count": like_count,
+                "comment_count": comment_count,
+                "share_count": share_count,
+                "engagement_score": engagement_score,
+                "posted_at": posted_at,
+                "is_viral": viral_flag
             })
         return items
 
@@ -438,11 +589,23 @@ def format_dummy_social_context(items: List[Dict[str, Any]]) -> str:
 
     lines = []
     for item in items:
+        viral_tag = " 🔥 VIRAL" if item.get("is_viral") else ""
+        text_preview = (item.get("text") or "").strip()
+        if len(text_preview) > 140:
+            text_preview = f"{text_preview[:140]}..."
         lines.append(
-            f"- {item['platform'].upper()} #{item['index']}: {item['title']} | {item['summary']}\n"
-            f"  Views: {item['views']:,}, Likes: {item['likes']:,}, Comments: {item['comments']:,}"
+            f"- {item['platform'].upper()}{viral_tag}: {item.get('author', '')}\n"
+            f"  Content: {text_preview}\n"
+            f"  Hashtags: {item.get('hashtags', '')}\n"
+            f"  Views: {item.get('view_count', 0):,}, Likes: {item.get('like_count', 0):,}, "
+            f"Comments: {item.get('comment_count', 0):,}, Shares: {item.get('share_count', 0):,}"
         )
     return "\n".join(lines)
+
+
+def build_context_from_items(items: List[Dict[str, Any]]) -> str:
+    """원인데이터 아이템을 프롬프트용 텍스트로 변환"""
+    return format_dummy_social_context(items)
 
 
 def prepare_scenario_event_data(
@@ -509,10 +672,97 @@ def main():
     st.title("🧪 Laneige Prompt Tester")
     st.markdown("**프롬프트를 테스트하고 최적의 인사이트 생성 방식을 찾으세요**")
 
+    @st.dialog("저장된 템플릿 불러오기")
+    def saved_templates_dialog():
+        st.markdown(
+            """
+            <style>
+            div[role="dialog"] { width: 900px; max-width: 95vw; }
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
+        overrides = load_template_overrides()
+        if not overrides:
+            st.info("저장된 템플릿이 없습니다.")
+            return
+
+        options = []
+        for item in overrides:
+            label = item["template_key"]
+            if item.get("name"):
+                label = f"{label} - {item['name']}"
+            if item.get("updated_at"):
+                label = f"{label} ({item['updated_at']:%Y-%m-%d %H:%M})"
+            else:
+                label = f"{label} (unknown time)"
+            options.append(label)
+        selected_index = st.selectbox(
+            "저장된 템플릿 선택",
+            options=range(len(options)),
+            format_func=lambda idx: options[idx]
+        )
+        selected_data = overrides[selected_index]
+        updated_at = selected_data.get("updated_at")
+        if updated_at:
+            st.caption(f"updated {updated_at:%Y-%m-%d %H:%M}")
+
+        with st.expander("System Prompt (전체 보기)", expanded=True):
+            st.code(selected_data.get("system_prompt", ""))
+        with st.expander("User Prompt (전체 보기)", expanded=True):
+            st.code(selected_data.get("user_prompt", ""))
+
+        col_apply, col_delete, col_spacer = st.columns([1, 1, 3])
+        with col_apply:
+            if st.button("✅ 적용", use_container_width=True):
+                target = st.session_state.get("template_apply_target", {})
+                system_key = target.get("system_key")
+                user_key = target.get("user_key")
+                if not system_key or not user_key:
+                    st.error("적용 대상이 설정되지 않았습니다.")
+                else:
+                    st.session_state[system_key] = selected_data.get("system_prompt", "")
+                    st.session_state[user_key] = selected_data.get("user_prompt", "")
+                    st.success("적용되었습니다.")
+                    st.rerun()
+        with col_delete:
+            if st.button("🗑️ 삭제", use_container_width=True):
+                delete_template_override(selected_data["id"])
+                st.success("삭제되었습니다.")
+                st.rerun()
+
+    @st.dialog("템플릿 저장")
+    def save_template_dialog():
+        pending = st.session_state.get("template_save_pending")
+        if not pending:
+            st.info("저장할 템플릿 정보가 없습니다.")
+            return
+        name = st.text_input(
+            "저장 이름",
+            value="",
+            placeholder="예: 랭킹 급등 분석 v2",
+            key="template_save_name"
+        )
+        col_save, col_cancel = st.columns(2)
+        with col_save:
+            if st.button("💾 저장", use_container_width=True):
+                save_template_override(
+                    pending["template_key"],
+                    pending["system_prompt"],
+                    pending["user_prompt"],
+                    name=name or None
+                )
+                st.success("✅ 템플릿이 저장되었습니다.")
+                st.session_state.pop("template_save_pending", None)
+                st.rerun()
+        with col_cancel:
+            if st.button("취소", use_container_width=True):
+                st.session_state.pop("template_save_pending", None)
+                st.rerun()
+
     # 사이드바 - 설정
     with st.sidebar:
         st.header("⚙️ 설정")
-
         api_key = settings.OPENAI_API_KEY or ""
         st.caption("OpenAI API 키는 `.env`의 `OPENAI_API_KEY`에서 읽어옵니다.")
 
@@ -570,6 +820,7 @@ def main():
         return
 
     # 템플릿 목록 (프롬프트 포함)
+    ensure_prompt_template_table()
     templates = generator.templates
 
     # 탭 구성
@@ -662,6 +913,12 @@ def main():
             }
             st.caption("위 템플릿에 이벤트 데이터를 적용한 결과입니다.")
             st.code(prompt_preview["user"])
+
+            col_save, col_reset = st.columns([1, 3])
+            with col_save:
+                if st.button("💾 템플릿 저장", use_container_width=True):
+                    save_template_override(current_template, edited_system, user_template_text)
+                    st.success("✅ 템플릿이 저장되었습니다.")
 
             # 생성 버튼
             if st.button("🚀 인사이트 생성", type="primary", use_container_width=True):
@@ -919,29 +1176,42 @@ def main():
     # === 탭 4: 시나리오 테스트 ===
     @st.dialog("시나리오 테스트 도움말")
     def scenario_help_dialog():
+        rank_thresholds = []
+        for _, config in settings.EVENT_RANK_THRESHOLDS.items():
+            min_rank, max_rank = config["range"]
+            rank_thresholds.append(f"- {min_rank}~{max_rank}위: {config['threshold']}위")
+        rank_threshold_text = "\n".join(rank_thresholds)
+
         st.markdown(
-            """
+            f"""
             **무엇을 하는 기능인가요?**
             - 실데이터 없이도 랭킹 변동 시나리오를 만들어 이벤트 감지/인사이트 흐름을 테스트합니다.
 
             **사용 순서**
-            1. 더미 카테고리/제품 생성
-            2. 제품/카테고리 선택
-            3. 랭킹 시작/종료 값과 시간 범위 설정
-            4. 시나리오 생성 및 이벤트 감지
-            5. (선택) 임의 원인데이터 생성 후 인사이트 테스트
+            1. 제품/카테고리 선택
+            2. 랭킹 시작/종료 값과 시간 범위 설정
+            3. 시나리오 생성 및 이벤트 감지
+            4. (선택) 임의 원인데이터 생성 후 인사이트 테스트
 
             **팁**
             - 변동폭이 작으면 이벤트가 감지되지 않을 수 있습니다.
             - 가격/리뷰 변화를 함께 주면 다른 이벤트 타입도 확인할 수 있습니다.
 
             **설정값 설명**
-            - **카테고리/제품 생성 수**: 시나리오용 더미 카테고리/제품 개수입니다.
             - **시작 랭킹**: 시나리오 시작 시점의 랭킹입니다.
             - **종료 랭킹**: 시나리오 마지막 시점의 랭킹입니다.
             - **시간 범위(시간)**: 시나리오가 몇 시간에 걸쳐 진행됐는지입니다.
             - **가격 변화(%)**: 마지막 시점의 가격 변동률입니다.
             - **리뷰 증가량**: 마지막 시점의 리뷰 증가 수입니다.
+
+            **이벤트 감지 기준**
+            - 최소 데이터 포인트: {settings.EVENT_TREND_MIN_DATA_POINTS}개
+            - 분석 시간창: {settings.EVENT_TREND_ANALYSIS_HOURS}시간 (시나리오 옵션으로 변경 가능)
+            - 일관성 기준: {settings.EVENT_TREND_CONSISTENCY_THRESHOLD:.0%} 이상
+            - 순위 임계값(구간별):
+            {rank_threshold_text}
+            - 순위 변동률 임계값: {settings.EVENT_RANK_CHANGE_PCT_THRESHOLD:.0f}% (하이브리드 기준)
+            - 가격/리뷰 변화는 **랭킹 이벤트가 감지된 경우에만** 부가 정보로 기록됩니다.
             """
         )
 
@@ -952,58 +1222,15 @@ def main():
             scenario_help_dialog()
 
         ensure_scenario_tables()
-        st.caption("시나리오용 더미 테이블을 사용합니다. 실데이터와 분리됩니다.")
-
-        with st.expander("더미 데이터 생성", expanded=True):
-            col_seed1, col_seed2 = st.columns(2)
-            with col_seed1:
-                seed_categories = st.number_input("카테고리 생성 수", min_value=1, max_value=20, value=3, step=1)
-            with col_seed2:
-                seed_products = st.number_input("제품 생성 수", min_value=1, max_value=50, value=5, step=1)
-
-            col_seed3, col_seed4 = st.columns(2)
-            with col_seed3:
-                if st.button("🧩 더미 카테고리/제품 생성", use_container_width=True):
-                    with get_db_context() as db:
-                        existing_categories = db.execute(
-                            select(ScenarioCategory).order_by(ScenarioCategory.id)
-                        ).scalars().all()
-                        existing_products = db.execute(
-                            select(ScenarioProduct).order_by(ScenarioProduct.id)
-                        ).scalars().all()
-
-                        start_cat_index = len(existing_categories) + 1
-                        start_prod_index = len(existing_products) + 1
-
-                        for i in range(int(seed_categories)):
-                            db.add(ScenarioCategory(category_name=f"Scenario Category {start_cat_index + i}"))
-
-                        timestamp = datetime.utcnow().strftime('%Y%m%d%H%M%S')
-                        for i in range(int(seed_products)):
-                            db.add(ScenarioProduct(
-                                asin=f"SCN-{timestamp}-{start_prod_index + i}",
-                                product_name=f"LANEIGE Scenario Product {start_prod_index + i}",
-                                brand_id=1
-                            ))
-                        db.commit()
-                    st.success("✅ 더미 데이터가 생성되었습니다.")
-            with col_seed4:
-                if st.button("🧹 시나리오 데이터 초기화", use_container_width=True):
-                    with get_db_context() as db:
-                        db.execute(delete(ScenarioRankingEvent))
-                        db.execute(delete(ScenarioRanking))
-                        db.execute(delete(ScenarioProduct))
-                        db.execute(delete(ScenarioCategory))
-                        db.commit()
-                    st.success("✅ 시나리오 데이터가 초기화되었습니다.")
+        st.caption("시나리오용 전용 테이블을 사용합니다. 실데이터와 분리됩니다.")
 
         products = load_scenario_products()
         categories = load_scenario_categories()
 
         if not products:
-            st.warning("⚠️ 시나리오 제품이 없습니다. 위에서 더미 데이터를 생성하세요.")
+            st.warning("⚠️ 시나리오 제품이 없습니다. DB 초기화를 확인하세요.")
         if not categories:
-            st.warning("⚠️ 시나리오 카테고리가 없습니다. 위에서 더미 데이터를 생성하세요.")
+            st.warning("⚠️ 시나리오 카테고리가 없습니다. DB 초기화를 확인하세요.")
         if not products or not categories:
             st.stop()
 
@@ -1131,10 +1358,16 @@ def main():
                         filtered_summaries = [
                             {
                                 "event_type": e.event_type,
-                                "prev_rank": e.prev_rank,
-                                "curr_rank": e.curr_rank,
-                                "rank_change": e.rank_change,
+                                "prev_rank": int(e.prev_rank or 0),
+                                "curr_rank": int(e.curr_rank or 0),
+                                "rank_change": int(e.rank_change or 0),
                                 "severity": e.severity,
+                                "prev_price": float(e.prev_price) if e.prev_price is not None else None,
+                                "curr_price": float(e.curr_price) if e.curr_price is not None else None,
+                                "price_change_pct": float(e.price_change_pct) if e.price_change_pct is not None else None,
+                                "prev_review_count": int(e.prev_review_count or 0),
+                                "curr_review_count": int(e.curr_review_count or 0),
+                                "review_change": int(e.review_change or 0),
                             }
                             for e in filtered
                         ]
@@ -1145,9 +1378,29 @@ def main():
                     if filtered_summaries:
                         st.success(f"✅ 이벤트 감지: {len(filtered_summaries)}개")
                         for event in filtered_summaries:
+                            if event["event_type"] == "PRICE_CHANGE":
+                                prev_price = event["prev_price"]
+                                curr_price = event["curr_price"]
+                                price_change_pct = event["price_change_pct"]
+                                price_detail = (
+                                    f"{'N/A' if prev_price is None else f'${prev_price:.2f}'}"
+                                    f"→{'N/A' if curr_price is None else f'${curr_price:.2f}'}"
+                                )
+                                if price_change_pct is not None:
+                                    price_detail += f" ({price_change_pct:+.1f}%)"
+                                detail = price_detail
+                            elif event["event_type"] == "REVIEW_SURGE":
+                                detail = (
+                                    f"{event['prev_review_count']}→{event['curr_review_count']} "
+                                    f"(+{event['review_change']})"
+                                )
+                            else:
+                                detail = (
+                                    f"{event['prev_rank']}→{event['curr_rank']} "
+                                    f"({event['rank_change']:+d})"
+                                )
                             st.markdown(
-                                f"- **{event['event_type']}** | {event['prev_rank']}→{event['curr_rank']} "
-                                f"({event['rank_change']:+d}) | {event['severity']}"
+                                f"- **{event['event_type']}** | {detail} | {event['severity']}"
                             )
                     else:
                         st.warning("⚠️ 감지된 이벤트가 없습니다. 임계값/랭킹 변동을 조정해보세요.")
@@ -1233,6 +1486,8 @@ def main():
                 context_store[selected_scenario_event['id']] = items
                 context_key = f"scenario_context_{selected_scenario_event['id']}"
                 st.session_state[context_key] = format_dummy_social_context(items)
+                editor_data_key = f"scenario_context_editor_{selected_scenario_event['id']}_data"
+                st.session_state[editor_data_key] = items
                 st.success("임의 원인데이터를 생성했습니다.")
 
             context_items = context_store.get(selected_scenario_event['id'], [])
@@ -1243,13 +1498,32 @@ def main():
                 st.session_state[context_key] = context_text
             if context_key not in st.session_state:
                 st.session_state[context_key] = context_text
-            with st.expander("원인데이터 미리보기", expanded=bool(context_items)):
-                edited_context_text = st.text_area(
-                    "Social Context",
-                    value=st.session_state.get(context_key, context_text),
-                    height=180,
-                    key=context_key
+            with st.expander("원인데이터 입력 (UI 편집)", expanded=True):
+                editor_key = f"scenario_context_editor_{selected_scenario_event['id']}"
+                editor_data_key = f"{editor_key}_data"
+                if editor_data_key not in st.session_state:
+                    st.session_state[editor_data_key] = context_items
+                editor_df = pd.DataFrame(st.session_state[editor_data_key])
+                edited_df = st.data_editor(
+                    editor_df,
+                    use_container_width=True,
+                    num_rows="dynamic",
+                    key=editor_key
                 )
+                edited_items = edited_df.to_dict(orient="records") if not edited_df.empty else []
+                if st.button("✅ 원인데이터 반영", key=f"apply_context_{selected_scenario_event['id']}"):
+                    context_store[selected_scenario_event['id']] = edited_items
+                    st.session_state[editor_data_key] = edited_items
+                    st.session_state[context_key] = build_context_from_items(edited_items)
+                    st.success("원인데이터가 반영되었습니다.")
+
+            st.caption("필요하면 아래에서 텍스트로 직접 편집할 수 있습니다.")
+            edited_context_text = st.text_area(
+                "Social Context (직접 편집)",
+                value=st.session_state.get(context_key, context_text),
+                height=180,
+                key=f"{context_key}_text"
+            )
 
             st.markdown("**2) 인사이트 생성**")
             if not templates:
@@ -1314,6 +1588,21 @@ def main():
                     height=240,
                     disabled=True
                 )
+                col_save, col_spacer = st.columns([1, 3])
+                with col_save:
+                    if st.button("💾 템플릿 저장", key="scenario_template_save", use_container_width=True):
+                        st.session_state["template_save_pending"] = {
+                            "template_key": selected_template_key,
+                            "system_prompt": scenario_system_override or base_system,
+                            "user_prompt": scenario_user_override or base_user
+                        }
+                        save_template_dialog()
+                if st.button("📂 저장된 템플릿 불러오기", use_container_width=True):
+                    st.session_state["template_apply_target"] = {
+                        "system_key": scenario_system_key,
+                        "user_key": scenario_user_key
+                    }
+                    saved_templates_dialog()
 
             if st.button("🧠 인사이트 생성", type="primary", use_container_width=True):
                 if not context_items:

@@ -83,7 +83,7 @@ class EventContextSocial(Base):
     content_id = Column(String(255), nullable=False)
     author = Column(String(255))
     text = Column(Text)
-    hashtags = Column(Text)  # SQLite doesn't support ARRAY, use comma-separated string
+    hashtags = Column(Text)  # Some dialects don't support ARRAY, use comma-separated string
 
     # 메트릭
     view_count = Column(Integer)

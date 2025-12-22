@@ -36,5 +36,5 @@
 
 ## Security & Configuration Tips
 - Copy `.env.example` to `.env` and set required keys (e.g., `OPENAI_API_KEY`, `YOUTUBE_API_KEY`).
-- Prefer SQLite for local development (`DATABASE_URL=sqlite:///data/laneige_tracker.db`).
+- Use PostgreSQL for local development (`DATABASE_URL=postgresql+psycopg://laneige:laneige@localhost:5432/laneige_tracker`).
 - Do not commit secrets or generated files under `data/`.

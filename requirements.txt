@@ -8,8 +8,9 @@ playwright==1.49.1
 sqlalchemy==2.0.36
 alembic==1.14.0
 
-# PostgreSQL (optional, comment out if using SQLite only)
+# PostgreSQL drivers
 psycopg[binary]==3.2.3  # Modern psycopg3 with Python 3.14 support
+asyncpg==0.30.0  # Async driver required for Prefect Postgres
 
 # Data Validation
 pydantic==2.10.3

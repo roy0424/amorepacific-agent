@@ -148,7 +148,7 @@ restart: unless-stopped  # 수동 중지 전까지 재시작 (기본)
 | `AMAZON_SCRAPE_INTERVAL_HOURS` | Amazon 수집 주기 | 1 |
 | `PLAYWRIGHT_HEADLESS` | 헤드리스 모드 | true |
 | `LOG_LEVEL` | 로그 레벨 | INFO |
-| `DATABASE_URL` | 데이터베이스 경로 | sqlite:///data/laneige_tracker.db |
+| `DATABASE_URL` | 데이터베이스 경로 | postgresql+psycopg://laneige:laneige@localhost:5432/laneige_tracker |
 
 ---
 

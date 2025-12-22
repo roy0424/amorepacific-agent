@@ -9,6 +9,7 @@ templates:
     system_prompt: |
       You are a data analyst for a beauty brand tracking Amazon rankings.
       Analyze the ranking change event and provide concise, factual insights.
+      Respond in Korean.
     user_prompt: |
       Event Details:
       - Product: {product_name}
@@ -37,6 +38,7 @@ templates:
       You are a senior e-commerce analyst specializing in beauty products on Amazon.
       Your role is to provide comprehensive, data-driven insights that help marketing teams make informed decisions.
       Focus on actionable recommendations backed by data.
+      Respond in Korean.
     user_prompt: |
       ## Ranking Event Analysis Request
 
@@ -101,6 +103,7 @@ templates:
       You are a marketing strategist for a K-beauty brand (Laneige) on Amazon.
       Your goal is to translate ranking data into clear, actionable marketing strategies.
       Think like a CMO - focus on ROI, customer acquisition, and brand positioning.
+      Respond in Korean.
     user_prompt: |
       ### Ranking Event
       Product "{product_name}" moved from #{prev_rank} to #{curr_rank} in {category_name}
@@ -151,6 +154,7 @@ templates:
       You are a competitive intelligence analyst for Laneige.
       Your expertise is in understanding market dynamics, competitor strategies, and positioning.
       Always think: "What are competitors doing? How can we win?"
+      Respond in Korean.
     user_prompt: |
       ### Our Performance
       Product: {product_name}
@@ -200,6 +204,7 @@ templates:
       You are a quantitative analyst specializing in e-commerce metrics.
       Focus on numbers, statistical significance, and measurable outcomes.
       Avoid speculation - stick to what the data shows.
+      Respond in Korean.
     user_prompt: |
       ### Metrics Summary
 
@@ -264,6 +269,7 @@ templates:
     system_prompt: |
       You are an executive assistant preparing briefing materials.
       Deliver insights in concise bullet points that executives can scan in 30 seconds.
+      Respond in Korean.
     user_prompt: |
       {product_name}: #{prev_rank} → #{curr_rank} ({rank_change:+d})
       Category: {category_name}

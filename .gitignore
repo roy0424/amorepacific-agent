@@ -55,6 +55,7 @@ data/logs/*.log
 # Data & Reports
 data/backups/*.json
 data/reports/*.xlsx
+data
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -80,3 +81,4 @@ alembic.ini
 
 # OS
 Thumbs.db
+

@@ -191,25 +191,29 @@ class EventDetector:
         if rank_event:
             events.append(rank_event)
 
-        # 최신 2개 데이터로 가격/리뷰 변동 체크 (기존 방식 유지)
-        if len(rankings) >= 2:
+        # 최신 2개 데이터로 가격/리뷰 변동 체크 (랭킹 이벤트에만 부가 정보로 포함)
+        if rank_event and len(rankings) >= 2:
             current = rankings[0]
             previous = rankings[1]
 
             # 가격 변동
-            price_event = self._check_price_change(product, category_id, current, previous)
-            if price_event:
-                events.append(price_event)
+            if current.price and previous.price:
+                price_change = float(current.price) - float(previous.price)
+                price_change_pct = (price_change / float(previous.price)) * 100
+                if abs(price_change_pct) >= self.price_change_pct_threshold:
+                    rank_event.prev_price = previous.price
+                    rank_event.curr_price = current.price
+                    rank_event.price_change_pct = price_change_pct
 
             # 리뷰 급증
-            review_event = self._check_review_surge(product, category_id, current, previous)
-            if review_event:
-                events.append(review_event)
+            if current.review_count and previous.review_count:
+                review_change = current.review_count - previous.review_count
+                if review_change >= self.review_surge_threshold:
+                    rank_event.prev_review_count = previous.review_count
+                    rank_event.curr_review_count = current.review_count
+                    rank_event.review_change = review_change
 
-            # 재고 변화
-            stock_event = self._check_stock_change(product, category_id, current, previous)
-            if stock_event:
-                events.append(stock_event)
+            # 재고 변화는 랭킹 이벤트만 기준으로 다룰 수 있도록 별도 이벤트 생성은 비활성화
 
         return events
 

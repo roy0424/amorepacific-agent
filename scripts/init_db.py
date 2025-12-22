@@ -15,7 +15,8 @@ from src.models import (
     Brand, AmazonCategory,
     YouTubeVideo, YouTubeMetric,
     TikTokPost, TikTokMetric,
-    InstagramPost, InstagramMetric
+    InstagramPost, InstagramMetric,
+    ScenarioCategory, ScenarioProduct
 )
 from config import settings
 import json
@@ -127,6 +128,55 @@ def seed_categories():
         logger.info(f"카테고리 데이터 시딩 완료: {len(categories_data)}개")
 
 
+def seed_scenario_data():
+    """시나리오 테스트용 기본 더미 데이터 시딩"""
+    logger.info("시나리오 더미 데이터 시딩 시작...")
+
+    scenario_categories = [
+        "Lip Care",
+        "Skin Care",
+        "Moisturizers",
+        "Face Masks",
+        "Cleansers",
+    ]
+    scenario_products = [
+        {"name": "Laneige Lip Sleeping Mask", "asin": "B0009V1Z0S"},
+        {"name": "Laneige Water Sleeping Mask", "asin": "B00R9D5J3O"},
+        {"name": "Laneige Cream Skin Toner & Moisturizer", "asin": "B07Q7NWXK3"},
+        {"name": "Laneige Water Bank Blue Hyaluronic Cream", "asin": "B0B9F3BSW5"},
+        {"name": "Laneige Water Bank Blue Hyaluronic Serum", "asin": "B0B9F3S1P7"},
+        {"name": "Laneige Lip Glowy Balm", "asin": "B07ZHB7G5Q"},
+        {"name": "Laneige Bouncy & Firm Sleeping Mask", "asin": "B0C9BG1C7Q"},
+        {"name": "Laneige Water Bank Cleansing Foam", "asin": "B0B9F6Z2RQ"},
+        {"name": "Laneige Cream Skin Refiner", "asin": "B07Q7P5F7S"},
+        {"name": "Laneige Water Bank Blue Hyaluronic Eye Cream", "asin": "B0B9F5ZJ1M"},
+    ]
+
+    with get_db_context() as db:
+        for name in scenario_categories:
+            existing = db.query(ScenarioCategory).filter(
+                ScenarioCategory.category_name == name
+            ).first()
+            if existing:
+                continue
+            db.add(ScenarioCategory(category_name=name))
+
+        for product in scenario_products:
+            existing = db.query(ScenarioProduct).filter(
+                ScenarioProduct.product_name == product["name"]
+            ).first()
+            if existing:
+                continue
+            db.add(ScenarioProduct(
+                asin=product["asin"],
+                product_name=product["name"],
+                brand_id=1
+            ))
+
+        db.commit()
+        logger.info("시나리오 더미 데이터 시딩 완료")
+
+
 def main():
     """메인 실행 함수"""
     try:
@@ -146,6 +196,7 @@ def main():
         # 초기 데이터 시딩
         seed_brands()
         seed_categories()
+        seed_scenario_data()
 
         logger.info("=" * 60)
         logger.info("데이터베이스 초기화 완료!")
