@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Data (빌드 시 포함하지 않음, 볼륨 마운트로 관리)
+data/logs/*
+data/backups/*
+data/reports/*
+data/database/*
+*.db
+*.db-journal
+
+# Temporary files
+*.log
+*.tmp
+temp/
+tmp/
+
+# Documentation
+*.md
+!README.md
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Test
+tests/
+pytest.ini
+.pytest_cache/
+
+# Other
+.env.example
+*.bak

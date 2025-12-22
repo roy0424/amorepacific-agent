@@ -1,0 +1,69 @@
+# Core Framework
+python-dotenv==1.0.1
+
+# Web Scraping
+playwright==1.49.1
+
+# Database
+sqlalchemy==2.0.36
+alembic==1.14.0
+
+# PostgreSQL (optional, comment out if using SQLite only)
+psycopg[binary]==3.2.3  # Modern psycopg3 with Python 3.14 support
+
+# Data Validation
+pydantic==2.10.3
+pydantic-settings==2.6.1
+
+# Data Processing
+pandas==2.2.3  # Updated for Python 3.14 support
+numpy==2.2.1  # Updated for Python 3.14 support
+
+# Excel & Reporting
+openpyxl==3.1.5
+xlsxwriter==3.2.0
+plotly==5.24.1
+
+# Workflow Orchestration (Prefect OSS - 100% 무료!)
+prefect==3.1.11
+
+# Logging
+loguru==0.7.3
+
+# AI & LLM
+openai==1.58.1
+anthropic==0.42.0  # Claude API
+langchain==0.3.13
+langchain-openai==0.2.14
+# chromadb==0.5.23  # Vector DB for RAG (Python 3.13 호환 문제로 임시 비활성화)
+# sentence-transformers==3.3.1  # Text embeddings (chromadb 의존성)
+
+# UI for Prompt Testing
+streamlit==1.40.2
+
+# Social Media APIs
+google-api-python-client==2.154.0  # YouTube API
+google-auth-httplib2==0.2.0
+google-auth-oauthlib==1.2.1
+isodate==0.7.2  # YouTube duration parsing
+youtube-transcript-api==0.6.2  # YouTube captions/subtitles
+
+# TikTok APIs
+apify-client>=2.3.0  # Apify TikTok Scraper (clockworks)
+# TikTokApi==6.5.2  # Optional: unofficial API (commented out, using Playwright instead)
+
+# Instagram
+instaloader==4.13.1
+
+# Utilities
+requests==2.32.3
+aiohttp==3.11.10
+# asyncio is built into Python 3.14, removed from requirements
+python-dateutil==2.9.0.post0
+
+# Development & Testing (optional)
+pytest==8.3.4
+pytest-asyncio==0.24.0
+black==24.10.0
+flake8==7.1.1
+mypy==1.13.0

@@ -1,0 +1,34 @@
+{
+  "amazon_categories": [
+    {
+      "id": "beauty",
+      "name": "Beauty & Personal Care",
+      "url": "https://www.amazon.com/Best-Sellers-Beauty/zgbs/beauty",
+      "parent": null
+    },
+    {
+      "id": "lip_care",
+      "name": "Lip Care",
+      "url": "https://www.amazon.com/Best-Sellers-Lip-Care/zgbs/beauty/3761351",
+      "parent": "beauty"
+    },
+    {
+      "id": "skin_care",
+      "name": "Skin Care",
+      "url": "https://www.amazon.com/Best-Sellers-Skin-Care/zgbs/beauty/11060451",
+      "parent": "beauty"
+    },
+    {
+      "id": "lip_makeup",
+      "name": "Lip Makeup",
+      "url": "https://www.amazon.com/Best-Sellers-Lip-Makeup/zgbs/beauty/11059031",
+      "parent": "beauty"
+    },
+    {
+      "id": "face_powder",
+      "name": "Face Powder",
+      "url": "https://www.amazon.com/Best-Sellers-Face-Powder/zgbs/beauty/11058971",
+      "parent": "beauty"
+    }
+  ]
+}

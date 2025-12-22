@@ -1,0 +1,296 @@
+# 프롬프트 템플릿 관리
+# 팀원들이 다양한 프롬프트를 테스트하여 최적의 인사이트 생성 방식을 찾을 수 있습니다.
+
+templates:
+  # 기본 프롬프트 (간결함)
+  basic:
+    name: "Basic - 간결한 분석"
+    description: "기본적인 사실 기반 분석"
+    system_prompt: |
+      You are a data analyst for a beauty brand tracking Amazon rankings.
+      Analyze the ranking change event and provide concise, factual insights.
+    user_prompt: |
+      Event Details:
+      - Product: {product_name}
+      - Category: {category_name}
+      - Ranking Change: {prev_rank} → {curr_rank} ({rank_change:+d} positions)
+      - Event Type: {event_type}
+      - Severity: {severity}
+      - Price Change: {price_change_pct}%
+
+      Trend Analysis:
+      {trend_info}
+
+      Social Media Context:
+      {social_context}
+
+      Please provide:
+      1. Summary of what happened
+      2. Possible causes
+      3. Recommended actions
+
+  # 상세 분석 프롬프트
+  detailed:
+    name: "Detailed - 상세 분석"
+    description: "심층적이고 구조화된 분석"
+    system_prompt: |
+      You are a senior e-commerce analyst specializing in beauty products on Amazon.
+      Your role is to provide comprehensive, data-driven insights that help marketing teams make informed decisions.
+      Focus on actionable recommendations backed by data.
+    user_prompt: |
+      ## Ranking Event Analysis Request
+
+      ### Product Information
+      - Product Name: {product_name}
+      - ASIN: {asin}
+      - Current Rank: {curr_rank}
+      - Previous Rank: {prev_rank}
+      - Rank Change: {rank_change:+d} positions
+      - Category: {category_name}
+
+      ### Event Details
+      - Event Type: {event_type}
+      - Severity Level: {severity}
+      - Detection Time: {detected_at}
+      - Trend Consistency: {consistency}%
+
+      ### Price & Reviews
+      - Price Change: {price_change_pct}%
+      - Current Price: ${current_price}
+      - Review Count Change: {review_count_change}
+
+      ### Social Media Signals
+      {social_context}
+
+      ### Historical Trend
+      {trend_info}
+
+      ## Analysis Requirements
+
+      Please provide a comprehensive analysis including:
+
+      1. **Executive Summary** (2-3 sentences)
+         - What happened and why it matters
+
+      2. **Root Cause Analysis**
+         - Primary factors driving this change
+         - Supporting evidence from data
+
+      3. **Market Context**
+         - Competitive landscape considerations
+         - Seasonal or trend factors
+
+      4. **Impact Assessment**
+         - Short-term implications
+         - Long-term considerations
+
+      5. **Actionable Recommendations**
+         - Immediate actions (next 24-48 hours)
+         - Strategic actions (next 1-4 weeks)
+         - Success metrics to monitor
+
+      6. **Confidence Level**
+         - Your confidence in this analysis (Low/Medium/High)
+         - Key uncertainties or data gaps
+
+  # 마케팅 중심 프롬프트
+  marketing_focus:
+    name: "Marketing Focus - 마케팅 액션"
+    description: "마케팅 팀을 위한 실행 가능한 조언"
+    system_prompt: |
+      You are a marketing strategist for a K-beauty brand (Laneige) on Amazon.
+      Your goal is to translate ranking data into clear, actionable marketing strategies.
+      Think like a CMO - focus on ROI, customer acquisition, and brand positioning.
+    user_prompt: |
+      ### Ranking Event
+      Product "{product_name}" moved from #{prev_rank} to #{curr_rank} in {category_name}
+
+      Change: {rank_change:+d} positions
+      Event Type: {event_type}
+      Severity: {severity}
+
+      ### Context
+      - Price: {price_change_pct}% change
+      - Reviews: {review_count_change} new reviews
+      - Social Media Activity:
+      {social_context}
+
+      ### Trend Pattern
+      {trend_info}
+
+      ## Your Task
+      As our marketing strategist, provide:
+
+      1. **Headline** - One sentence summary for leadership
+
+      2. **Marketing Interpretation**
+         - What does this mean for our brand?
+         - Is this opportunity or risk?
+
+      3. **Campaign Ideas**
+         - Should we amplify this momentum? How?
+         - Should we counter negative trends? How?
+
+      4. **Content Strategy**
+         - What content should we create?
+         - Which platforms to prioritize?
+
+      5. **Budget Allocation**
+         - Where should we invest ad spend?
+         - Expected ROI
+
+      6. **Timeline**
+         - Quick wins (this week)
+         - Medium-term plays (this month)
+
+  # 경쟁 분석 프롬프트
+  competitive:
+    name: "Competitive - 경쟁사 비교"
+    description: "경쟁 관점에서 분석"
+    system_prompt: |
+      You are a competitive intelligence analyst for Laneige.
+      Your expertise is in understanding market dynamics, competitor strategies, and positioning.
+      Always think: "What are competitors doing? How can we win?"
+    user_prompt: |
+      ### Our Performance
+      Product: {product_name}
+      Rank Movement: #{prev_rank} → #{curr_rank} ({rank_change:+d})
+      Category: {category_name}
+
+      ### Event Context
+      Type: {event_type}
+      Severity: {severity}
+      Price Change: {price_change_pct}%
+
+      ### Market Signals
+      {social_context}
+
+      {trend_info}
+
+      ## Competitive Analysis Framework
+
+      1. **Market Position**
+         - Where do we stand vs competitors?
+         - Are we gaining or losing ground?
+
+      2. **Competitor Moves**
+         - What might competitors have done to cause this?
+         - Are they running promotions? New launches?
+
+      3. **Market Share Implications**
+         - Estimated impact on category share
+         - Traffic and conversion implications
+
+      4. **Strategic Response**
+         - Should we match competitor tactics?
+         - Should we differentiate instead?
+
+      5. **Threats & Opportunities**
+         - Emerging competitive threats
+         - Windows of opportunity to exploit
+
+      6. **Intelligence Gaps**
+         - What additional competitor data do we need?
+
+  # 데이터 중심 프롬프트
+  data_driven:
+    name: "Data-Driven - 정량적 분석"
+    description: "숫자와 메트릭 중심 분석"
+    system_prompt: |
+      You are a quantitative analyst specializing in e-commerce metrics.
+      Focus on numbers, statistical significance, and measurable outcomes.
+      Avoid speculation - stick to what the data shows.
+    user_prompt: |
+      ### Metrics Summary
+
+      **Ranking Metrics:**
+      - Previous Rank: {prev_rank}
+      - Current Rank: {curr_rank}
+      - Absolute Change: {rank_change:+d} positions
+      - Percentage Change: {rank_change_pct}%
+      - Trend Consistency: {consistency}%
+
+      **Pricing Metrics:**
+      - Price Change: {price_change_pct}%
+      - Current Price: ${current_price}
+
+      **Engagement Metrics:**
+      - Review Count Change: {review_count_change}
+      - Rating: {rating}/5
+
+      **Event Classification:**
+      - Type: {event_type}
+      - Severity: {severity}
+      - Confidence: {confidence}
+
+      **Time Series:**
+      {trend_info}
+
+      **External Signals:**
+      {social_context}
+
+      ## Quantitative Analysis Required
+
+      1. **Statistical Summary**
+         - Key metrics and their changes
+         - Statistical significance of changes
+
+      2. **Trend Analysis**
+         - Rate of change (velocity)
+         - Acceleration/deceleration
+         - Volatility assessment
+
+      3. **Correlation Analysis**
+         - Price vs Rank correlation
+         - Social signals vs Rank correlation
+
+      4. **Forecasting**
+         - Expected rank in 24h/48h/7d
+         - Confidence intervals
+
+      5. **KPI Impact**
+         - Estimated traffic impact
+         - Estimated revenue impact
+         - Conversion rate implications
+
+      6. **Data Quality**
+         - Data completeness score
+         - Reliability of conclusions
+
+  # 간단한 불릿 포인트 스타일
+  bullet_points:
+    name: "Bullet Points - 불릿 포인트"
+    description: "빠른 리뷰를 위한 간결한 포맷"
+    system_prompt: |
+      You are an executive assistant preparing briefing materials.
+      Deliver insights in concise bullet points that executives can scan in 30 seconds.
+    user_prompt: |
+      {product_name}: #{prev_rank} → #{curr_rank} ({rank_change:+d})
+      Category: {category_name}
+      Event: {event_type} ({severity})
+
+      Context:
+      - Price: {price_change_pct}%
+      - Reviews: {review_count_change}
+      - Trend: {trend_info}
+      - Social: {social_context}
+
+      Provide brief bullet points:
+
+      **What Happened:**
+      -
+
+      **Why:**
+      -
+
+      **Actions:**
+      -
+
+      **Watch:**
+      -
+
+# 메타데이터
+metadata:
+  version: "1.0"
+  last_updated: "2025-12-20"
+  default_template: "detailed"
