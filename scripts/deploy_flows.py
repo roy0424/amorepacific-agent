@@ -19,7 +19,6 @@ import subprocess
 import time
 from loguru import logger
 from prefect import serve
-from prefect.types.entrypoint import EntrypointType
 import requests
 
 from src.flows.amazon_flow import amazon_pipeline
@@ -138,13 +137,16 @@ def deploy_all_flows():
                 )
             )
         else:
-            deployment_result = amazon_pipeline.deploy(
+            flow_for_deploy = amazon_pipeline.from_source(
+                source=str(project_root),
+                entrypoint="src/flows/amazon_flow.py:amazon_pipeline",
+            )
+            deployment_result = flow_for_deploy.deploy(
                 name="amazon-hourly",
                 interval=timedelta(hours=settings.AMAZON_SCRAPE_INTERVAL_HOURS),
                 work_pool_name=settings.PREFECT_WORK_POOL_NAME,
                 work_queue_name=settings.PREFECT_WORK_QUEUE_NAME,
                 tags=["production", "amazon", "scraping"],
-                entrypoint_type=EntrypointType.MODULE_PATH,
             )
 
             if inspect.isawaitable(deployment_result):
