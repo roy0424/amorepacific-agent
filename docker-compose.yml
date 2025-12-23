@@ -110,9 +110,6 @@ services:
       - laneige-network
 
   db-viewer:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
     image: laneige-tracker-dev:latest
     container_name: laneige-db-viewer
     restart: unless-stopped
