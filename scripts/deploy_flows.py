@@ -19,6 +19,7 @@ import subprocess
 import time
 from loguru import logger
 from prefect import serve
+from prefect.types.entrypoint import EntrypointType
 import requests
 
 from src.flows.amazon_flow import amazon_pipeline
@@ -143,7 +144,7 @@ def deploy_all_flows():
                 work_pool_name=settings.PREFECT_WORK_POOL_NAME,
                 work_queue_name=settings.PREFECT_WORK_QUEUE_NAME,
                 tags=["production", "amazon", "scraping"],
-                image=settings.PREFECT_DEPLOY_IMAGE,
+                entrypoint_type=EntrypointType.MODULE_PATH,
             )
 
             if inspect.isawaitable(deployment_result):

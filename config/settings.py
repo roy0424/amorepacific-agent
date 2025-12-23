@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     REPORTS_DIR: Path = DATA_DIR / "reports"
 
     # Database Configuration
-    DATABASE_URL: str = "postgresql+psycopg://laneige:laneige@localhost:5432/laneige_tracker"
+    DATABASE_URL: str = "postgresql+psycopg://laneige:laneige@postgres:5432/laneige_tracker"
     DB_ECHO: bool = False  # SQLAlchemy echo (디버깅용)
 
     # Anthropic (Claude) Configuration - RAG + Insight 생성용
