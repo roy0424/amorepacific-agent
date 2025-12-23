@@ -55,7 +55,7 @@ RUN mkdir -p data/logs data/backups data/reports data/database
 
 # 환경변수 설정
 ENV PYTHONUNBUFFERED=1
-ENV PREFECT_API_URL=http://localhost:4200/api
+ENV PREFECT_API_URL=http://prefect-server:4200/api
 ENV PREFECT_WORK_POOL_NAME=default-process
 ENV PREFECT_WORK_QUEUE_NAME=default
 ENV PREFECT_DEPLOY_IMAGE=laneige-tracker:latest
