@@ -70,6 +70,22 @@ services:
     networks:
       - laneige-network
 
+  deploy-flows:
+    image: laneige-tracker:latest
+    container_name: laneige-deploy-flows
+    restart: "no"
+    env_file:
+      - .env
+    environment:
+      - PREFECT_API_URL=http://prefect-server:4200/api
+      - PREFECT_USE_SERVE=false
+    command: ["python", "scripts/deploy_flows.py"]
+    depends_on:
+      prefect-server:
+        condition: service_healthy
+    networks:
+      - laneige-network
+
   prompt-tester:
     build:
       context: .
