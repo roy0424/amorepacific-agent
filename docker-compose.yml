@@ -56,6 +56,7 @@ services:
       - .env
     environment:
       - PREFECT_API_URL=${PREFECT_API_URL}
+      - PYTHONPATH=/app
       - PREFECT_WORK_POOL_NAME=default-process
       - PREFECT_WORK_QUEUE_NAME=default
       - PREFECT_DEPLOY_IMAGE=laneige-tracker:latest
@@ -80,6 +81,7 @@ services:
       - PREFECT_API_URL=http://prefect-server:4200/api
       - PREFECT_USE_SERVE=false
       - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-laneige}:${POSTGRES_PASSWORD:-laneige}@postgres:5432/${POSTGRES_APP_DB:-laneige_tracker}
+      - PYTHONPATH=/app
     command: ["python", "scripts/deploy_flows.py"]
     depends_on:
       prefect-server:

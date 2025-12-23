@@ -60,6 +60,7 @@ ENV PREFECT_WORK_POOL_NAME=default-process
 ENV PREFECT_WORK_QUEUE_NAME=default
 ENV PREFECT_DEPLOY_IMAGE=laneige-tracker:latest
 ENV PREFECT_USE_SERVE=true
+ENV PYTHONPATH=/app
 
 # 포트 노출
 # 4200: Prefect UI
