@@ -31,8 +31,8 @@ services:
       - .env
     environment:
       - PREFECT_SERVER_API_HOST=0.0.0.0
-      - PREFECT_API_URL=http://127.0.0.1:4200/api
-      - PREFECT_UI_API_URL=${PREFECT_UI_API_URL:-http://localhost:4200/api}
+      - PREFECT_API_URL=${PREFECT_API_URL}
+      - PREFECT_UI_API_URL=${PREFECT_UI_API_URL}
       - PREFECT_API_DATABASE_CONNECTION_URL=postgresql+asyncpg://${POSTGRES_USER:-laneige}:${POSTGRES_PASSWORD:-laneige}@postgres:5432/${POSTGRES_PREFECT_DB:-prefect}
     ports:
       - "4200:4200"
@@ -55,7 +55,7 @@ services:
     env_file:
       - .env
     environment:
-      - PREFECT_API_URL=http://prefect-server:4200/api
+      - PREFECT_API_URL=${PREFECT_API_URL}
       - PREFECT_WORK_POOL_NAME=default-process
       - PREFECT_WORK_QUEUE_NAME=default
       - PREFECT_DEPLOY_IMAGE=laneige-tracker:latest
