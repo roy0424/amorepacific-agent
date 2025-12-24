@@ -194,18 +194,32 @@ def plot_ranking_timeline(df: pd.DataFrame, title: str = "랭킹 변화 추이")
         st.warning("표시할 데이터가 없습니다.")
         return
 
+    # 여러 카테고리가 섞여있는지 확인
+    df_plot = df.copy()
+    has_multiple_categories = df_plot["category_name"].nunique() > 1
+
+    if has_multiple_categories:
+        # 전체 카테고리 선택 시: "제품명 (카테고리)" 형식으로 표시
+        df_plot["display_name"] = df_plot["product_name"].str[:30] + "... (" + df_plot["category_name"] + ")"
+        color_column = "display_name"
+        color_label = "제품 (카테고리)"
+    else:
+        # 특정 카테고리 선택 시: 제품명만 표시
+        color_column = "product_name"
+        color_label = "제품명"
+
     fig = px.line(
-        df.sort_values("collected_at"),
+        df_plot.sort_values("collected_at"),
         x="collected_at",
         y="rank",
-        color="product_name",
+        color=color_column,
         title=title,
         labels={
             "collected_at": "수집 시간",
             "rank": "랭킹",
-            "product_name": "제품명"
+            color_column: color_label
         },
-        hover_data=["asin", "brand_name", "price", "rating"]
+        hover_data=["asin", "brand_name", "category_name", "price", "rating"]
     )
 
     # Y축 반전 (랭킹이 낮을수록 좋음)
@@ -225,17 +239,32 @@ def plot_price_timeline(df: pd.DataFrame):
         st.warning("가격 데이터가 없습니다.")
         return
 
+    # 여러 카테고리가 섞여있는지 확인
+    df_plot = df.copy()
+    has_multiple_categories = df_plot["category_name"].nunique() > 1
+
+    if has_multiple_categories:
+        # 전체 카테고리 선택 시: "제품명 (카테고리)" 형식으로 표시
+        df_plot["display_name"] = df_plot["product_name"].str[:30] + "... (" + df_plot["category_name"] + ")"
+        color_column = "display_name"
+        color_label = "제품 (카테고리)"
+    else:
+        # 특정 카테고리 선택 시: 제품명만 표시
+        color_column = "product_name"
+        color_label = "제품명"
+
     fig = px.line(
-        df.sort_values("collected_at"),
+        df_plot.sort_values("collected_at"),
         x="collected_at",
         y="price",
-        color="product_name",
+        color=color_column,
         title="가격 변화 추이",
         labels={
             "collected_at": "수집 시간",
             "price": "가격 ($)",
-            "product_name": "제품명"
-        }
+            color_column: color_label
+        },
+        hover_data=["category_name"]
     )
 
     fig.update_layout(hovermode="x unified", height=400)
@@ -247,12 +276,26 @@ def plot_rank_distribution(df: pd.DataFrame):
     if df.empty:
         return
 
+    # 여러 카테고리가 섞여있는지 확인
+    df_plot = df.copy()
+    has_multiple_categories = df_plot["category_name"].nunique() > 1
+
+    if has_multiple_categories:
+        # 전체 카테고리 선택 시: "제품명 (카테고리)" 형식으로 표시
+        df_plot["display_name"] = df_plot["product_name"].str[:30] + "... (" + df_plot["category_name"] + ")"
+        color_column = "display_name"
+        color_label = "제품 (카테고리)"
+    else:
+        # 특정 카테고리 선택 시: 제품명만 표시
+        color_column = "product_name"
+        color_label = "제품명"
+
     fig = px.histogram(
-        df,
+        df_plot,
         x="rank",
-        color="product_name",
+        color=color_column,
         title="랭킹 분포",
-        labels={"rank": "랭킹", "product_name": "제품명"},
+        labels={"rank": "랭킹", color_column: color_label},
         nbins=50
     )
 
