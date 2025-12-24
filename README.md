@@ -61,6 +61,45 @@ python scripts/deploy_flows.py
 python scripts/run_manual.py --flow amazon
 ```
 
+## UI 도구
+
+### 1. Data Viewer (데이터베이스 뷰어 + 라네즈 랭킹 시각화)
+
+모든 데이터베이스 테이블 조회 및 라네즈 제품의 아마존 랭킹 데이터 시각화를 제공합니다.
+
+```bash
+streamlit run ui/db_viewer.py --server.port 8502
+```
+
+**주요 기능:**
+
+**📊 Database Viewer 페이지**
+- 모든 테이블 읽기 전용 조회
+- SQL 쿼리 미리보기
+- 필터링 및 정렬
+- CSV 데이터 내보내기
+
+**📈 Laneige Rankings 페이지**
+- 라네즈 제품만 자동 필터링
+- 시간에 따른 랭킹 변화 추이 (시계열 차트)
+- 가격 변화 추이
+- 랭킹 분포 히스토그램
+- 카테고리/제품별 필터링
+- 날짜 범위 선택 (최근 24시간, 7일, 30일, 전체)
+- CSV 데이터 내보내기
+
+→ 실행 후 http://localhost:8502 에서 확인
+
+### 2. Prompt Tester (AI 프롬프트 테스터)
+
+AI 인사이트 생성 프롬프트를 테스트할 수 있습니다.
+
+```bash
+streamlit run ui/prompt_tester.py --server.port 8501
+```
+
+→ 실행 후 http://localhost:8501 에서 확인
+
 ## Docker Compose
 
 기본 `docker compose up --build`에서 Prefect(4200)와 Streamlit(8501/8502)이 함께 구동됩니다.
