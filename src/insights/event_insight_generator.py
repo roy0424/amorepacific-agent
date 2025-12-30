@@ -1,263 +1,152 @@
-"""
-이벤트 인사이트 생성기
-RAG + LLM을 활용한 종합 분석 및 인사이트 생성
-"""
+import openai
+import yaml
+import json
+import os
 from loguru import logger
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from typing import Dict, List, Optional
-import json
 from datetime import datetime
 
 from src.insights.vector_store import EventVectorStore
-from src.insights.llm_client import ClaudeClient
-from src.insights.prompts import PROMPT_VERSION
 from src.models.events import RankingEvent, EventContextSocial, EventInsight
 from src.models.amazon import AmazonProduct, AmazonCategory
-
+from config.settings import settings
 
 class EventInsightGenerator:
-    """이벤트 인사이트 생성기"""
-
     def __init__(self):
-        """생성기 초기화"""
+        """생성기 초기화 및 템플릿 로드"""
         self.vector_store = EventVectorStore()
-        self.llm_client = ClaudeClient()
-        logger.info("EventInsightGenerator 초기화 완료")
 
-    def generate_insight(self, db: Session, event_id: int) -> Optional[EventInsight]:
+        # 1. YAML 템플릿 로드
+        try:
+            with open("config/prompt_templates.yaml", "r", encoding="utf-8") as f:
+                config = yaml.safe_load(f)
+                self.templates = config['templates']
+            logger.info(f"프롬프트 템플릿 로드 완료 ({len(self.templates)}개)")
+        except Exception as e:
+            logger.error(f"템플릿 파일 로드 실패: {e}")
+            self.templates = {}
+
+        # 2. OpenAI 클라이언트 초기화
+        self.client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+        self.model = "gpt-4o"  
+        logger.info("EventInsightGenerator (OpenAI GPT-4o) 초기화 완료")
+
+    def _get_competitor_analysis_from_file(self, file_path: str) -> str:
         """
-        특정 이벤트에 대한 인사이트 생성
-
-        Args:
-            db: DB 세션
-            event_id: 이벤트 ID
-
-        Returns:
-            생성된 EventInsight 객체
+        [RAG 구현부] 
+        외부 경쟁사 텍스트 데이터를 읽어 현재 상황에 필요한 핵심 인사이트로 요약합니다.
+        데이터가 확보되지 않았을 경우 샘플 파일을 참조할 수 있습니다.
         """
+        if not os.path.exists(file_path):
+            logger.warning(f"참조할 데이터 파일이 없습니다: {file_path}")
+            return ""
+
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            
+            # RAG 요약 로직: 방대한 텍스트 중 핵심만 한 줄로 추출
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "당신은 시장 분석가입니다. 제공된 데이터를 기반으로 경쟁사의 동향을 현재 우리 브랜드에 위협이 되는 요소 위주로 딱 한 줄로 요약하세요."},
+                    {"role": "user", "content": f"다음 데이터에서 핵심 경쟁사 동향을 한 문장으로 추출해줘:\n\n{content}"}
+                ],
+                temperature=0 # 일관된 요약을 위해 0으로 설정
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            logger.error(f"데이터 파일 분석 중 오류 발생: {e}")
+            return ""
+
+    def generate_insight(self, db: Session, event_id: int, competitor_text: str = "") -> Optional[EventInsight]:
+        """특정 이벤트에 대한 인사이트 생성 (데이터 결합)"""
         logger.info(f"이벤트 {event_id} 인사이트 생성 시작")
 
-        # 1. 이벤트 정보 로드
-        event = db.execute(
-            select(RankingEvent).where(RankingEvent.id == event_id)
-        ).scalar_one_or_none()
+        # 1. 이벤트 및 데이터 로드
+        event = db.execute(select(RankingEvent).where(RankingEvent.id == event_id)).scalar_one_or_none()
+        if not event: return None
 
-        if not event:
-            logger.error(f"이벤트 {event_id}를 찾을 수 없습니다")
-            return None
+        # 중복 생성 방지
+        existing_insight = db.execute(select(EventInsight).where(EventInsight.event_id == event_id)).scalar_one_or_none()
+        if existing_insight: return existing_insight
 
-        # 인사이트가 이미 생성되었는지 확인
-        existing_insight = db.execute(
-            select(EventInsight).where(EventInsight.event_id == event_id)
-        ).scalar_one_or_none()
-
-        if existing_insight:
-            logger.info(f"이벤트 {event_id} 인사이트가 이미 존재합니다")
-            return existing_insight
-
-        # 2. 이벤트 데이터 준비
         event_data = self._prepare_event_data(db, event)
-
-        # 3. 컨텍스트 데이터 수집
         context_data = self._collect_context_data(db, event)
-
-        # 4. 유사 이벤트 검색 (RAG)
         similar_events = self._find_similar_events(event_data)
 
-        # 5. LLM 인사이트 생성
-        try:
-            insight_result = self.llm_client.generate_structured_insight(
-                event_data=event_data,
-                context_data=context_data,
-                similar_events=similar_events
-            )
-        except Exception as e:
-            logger.error(f"LLM 인사이트 생성 실패: {e}")
-            return None
+        # 2. 템플릿 선정
+        template_key = "detailed" if event.severity in ['critical', 'high'] or competitor_text else "basic"
+        template = self.templates.get(template_key, self.templates.get('basic'))
 
-        # 6. EventInsight 객체 생성 및 저장
-        insight = EventInsight(
-            event_id=event_id,
-            summary=insight_result.get('summary', '인사이트 생성 실패'),
-            analysis=insight_result.get('analysis', ''),
-            likely_causes=json.dumps(insight_result.get('likely_causes', []), ensure_ascii=False),
-            recommendations=json.dumps(insight_result.get('recommendations', []), ensure_ascii=False),
-            similar_events=json.dumps([e['event_id'] for e in similar_events], ensure_ascii=False),
-            similarity_scores=json.dumps([e['similarity_score'] for e in similar_events], ensure_ascii=False),
-            llm_model=self.llm_client.model,
-            prompt_version=PROMPT_VERSION,
-            confidence_score=insight_result.get('confidence_score', 0.5),
-            generated_at=datetime.utcnow()
+        # 3. 컨텍스트 구성
+        social_text = ""
+        for s in context_data.get('social_media', []):
+            viral_tag = "[🔥VIRAL]" if s['is_viral'] else ""
+            social_text += f"- {viral_tag} {s['platform']} ({s['author']}): 조회 {s['view_count']}, 좋아요 {s['like_count']}\n"
+
+        # 4. 프롬프트 완성 (RAG 결과물인 competitor_text 주입)
+        user_prompt = template['user_prompt'].format(
+            product_name=event_data['product_name'],
+            category_name=event_data['category_name'],
+            prev_rank=event_data['prev_rank'],
+            curr_rank=event_data['curr_rank'],
+            rank_change=event_data['rank_change'],
+            event_type=event_data['event_type'],
+            severity=event_data['severity'],
+            price_change_pct=event_data['price_change_pct'] or 0,
+            trend_info=f"경쟁사 동향: {competitor_text}" if competitor_text else "특이 경쟁 동향 없음",
+            social_context=social_text or "해당 기간 소셜 지표 없음",
+            review_count_change=event_data['review_change'] or 0
         )
 
-        db.add(insight)
-        db.commit()
-        db.refresh(insight)
-
-        # 7. 이벤트를 벡터 DB에 추가 (향후 RAG 검색용)
-        self._add_event_to_vector_store(event, event_data)
-
-        # 8. 이벤트 상태 업데이트
-        event.insight_generated = True
-        db.commit()
-
-        logger.info(f"이벤트 {event_id} 인사이트 생성 완료")
-        return insight
-
-    def _prepare_event_data(self, db: Session, event: RankingEvent) -> Dict:
-        """이벤트 데이터 준비"""
-        # 제품 정보 로드
-        product = db.execute(
-            select(AmazonProduct).where(AmazonProduct.id == event.product_id)
-        ).scalar_one_or_none()
-
-        # 카테고리 정보 로드
-        category = db.execute(
-            select(AmazonCategory).where(AmazonCategory.id == event.category_id)
-        ).scalar_one_or_none()
-
-        return {
-            'event_id': event.id,
-            'event_type': event.event_type,
-            'severity': event.severity,
-            'product_id': event.product_id,
-            'product_name': product.product_name if product else 'Unknown',
-            'category_id': event.category_id,
-            'category_name': category.category_name if category else 'Unknown',
-            'prev_rank': event.prev_rank,
-            'curr_rank': event.curr_rank,
-            'rank_change': event.rank_change,
-            'rank_change_pct': event.rank_change_pct,
-            'prev_price': float(event.prev_price) if event.prev_price else None,
-            'curr_price': float(event.curr_price) if event.curr_price else None,
-            'price_change_pct': event.price_change_pct,
-            'prev_review_count': event.prev_review_count,
-            'curr_review_count': event.curr_review_count,
-            'review_change': event.review_change,
-            'detected_at': event.detected_at.isoformat() if event.detected_at else None,
-        }
-
-    def _collect_context_data(self, db: Session, event: RankingEvent) -> Dict:
-        """컨텍스트 데이터 수집"""
-        context_data = {}
-
-        # 소셜미디어 컨텍스트
-        social_contexts = db.execute(
-            select(EventContextSocial).where(EventContextSocial.event_id == event.id)
-        ).scalars().all()
-
-        context_data['social_media'] = [
-            {
-                'platform': ctx.platform,
-                'content_id': ctx.content_id,
-                'author': ctx.author,
-                'text': ctx.text,
-                'hashtags': ctx.hashtags,
-                'view_count': ctx.view_count,
-                'like_count': ctx.like_count,
-                'comment_count': ctx.comment_count,
-                'share_count': ctx.share_count,
-                'engagement_score': ctx.engagement_score,
-                'is_viral': ctx.is_viral,
-                'posted_at': ctx.posted_at.isoformat() if ctx.posted_at else None,
-            }
-            for ctx in social_contexts
-        ]
-
-        # TODO: 리뷰 컨텍스트 수집
-        context_data['reviews'] = []
-
-        # TODO: 경쟁사 컨텍스트 수집
-        context_data['competitors'] = []
-
-        logger.debug(f"컨텍스트 데이터 수집 완료 - 소셜: {len(context_data['social_media'])}개")
-        return context_data
-
-    def _find_similar_events(self, event_data: Dict, top_k: int = 5) -> List[Dict]:
-        """유사 이벤트 검색 (RAG)"""
+        # 5. LLM 호출 및 저장
         try:
-            # 벡터 DB에 이벤트가 있는지 확인
-            if self.vector_store.get_event_count() == 0:
-                logger.info("벡터 DB에 이벤트가 없습니다 - 유사 이벤트 검색 스킵")
-                return []
-
-            # 유사 이벤트 검색
-            similar_events = self.vector_store.search_similar_events(
-                event_data=event_data,
-                top_k=top_k
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": template['system_prompt']},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.7
             )
-
-            # 자기 자신 제외
-            current_event_id = event_data.get('event_id')
-            similar_events = [
-                e for e in similar_events
-                if e['event_id'] != current_event_id
-            ]
-
-            logger.info(f"유사 이벤트 {len(similar_events)}개 발견")
-            return similar_events[:top_k]
-
-        except Exception as e:
-            logger.error(f"유사 이벤트 검색 실패: {e}")
-            return []
-
-    def _add_event_to_vector_store(self, event: RankingEvent, event_data: Dict):
-        """이벤트를 벡터 DB에 추가"""
-        try:
-            self.vector_store.add_event(
-                event_id=event.id,
-                event_data=event_data,
-                metadata={
-                    'event_type': event.event_type,
-                    'severity': event.severity,
-                    'product_id': str(event.product_id),
-                    'detected_at': event.detected_at.isoformat() if event.detected_at else None,
-                }
+            llm_content = response.choices[0].message.content
+            
+            insight = EventInsight(
+                event_id=event_id,
+                summary=f"[{event_data['product_name']}] 분석 리포트",
+                analysis=llm_content,
+                likely_causes=json.dumps({"competitor": competitor_text, "social": social_text}, ensure_ascii=False),
+                recommendations=json.dumps([], ensure_ascii=False),
+                similar_events=json.dumps([e['event_id'] for e in similar_events], ensure_ascii=False),
+                llm_model=self.model,
+                generated_at=datetime.utcnow()
             )
-            logger.debug(f"이벤트 {event.id} 벡터 DB에 추가 완료")
+            db.add(insight)
+            event.insight_generated = True
+            db.commit()
+            return insight
         except Exception as e:
-            logger.error(f"벡터 DB 추가 실패: {e}")
+            logger.error(f"인사이트 생성 실패: {e}")
+            return None
 
-    def batch_generate_insights(
-        self,
-        db: Session,
-        event_ids: Optional[List[int]] = None,
-        limit: int = 10
-    ) -> List[EventInsight]:
-        """
-        여러 이벤트에 대한 인사이트 일괄 생성
-
-        Args:
-            db: DB 세션
-            event_ids: 이벤트 ID 목록 (None이면 미생성 이벤트 자동 선택)
-            limit: 최대 생성 개수
-
-        Returns:
-            생성된 인사이트 목록
-        """
+    def batch_generate_insights(self, db: Session, event_ids: Optional[List[int]] = None, limit: int = 10):
+        """일괄 생성 시 외부 데이터를 참조하는 RAG 로직 수행"""
         if event_ids is None:
-            # 인사이트가 생성되지 않은 이벤트 중 critical/high만 선택
             events = db.execute(
-                select(RankingEvent).where(
-                    RankingEvent.insight_generated == False,
-                    RankingEvent.severity.in_(['critical', 'high'])
-                ).limit(limit)
+                select(RankingEvent).where(RankingEvent.insight_generated == False).limit(limit)
             ).scalars().all()
-
             event_ids = [e.id for e in events]
 
-        logger.info(f"일괄 인사이트 생성 시작 - {len(event_ids)}개 이벤트")
+        # [RAG 시작] 샘플 파일에서 경쟁사 인사이트 추출
+        # 실제 운영시 이 경로에 경쟁사 데이터를 적재하면 됩니다.
+        competitor_info = self._get_competitor_analysis_from_file("data/competitor_sample.txt")
 
         insights = []
         for event_id in event_ids:
-            try:
-                insight = self.generate_insight(db, event_id)
-                if insight:
-                    insights.append(insight)
-            except Exception as e:
-                logger.error(f"이벤트 {event_id} 인사이트 생성 실패: {e}")
-                continue
-
-        logger.info(f"일괄 인사이트 생성 완료 - {len(insights)}개 성공")
+            insight = self.generate_insight(db, event_id, competitor_text=competitor_info)
+            if insight:
+                insights.append(insight)
         return insights
